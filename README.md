@@ -15,6 +15,8 @@ An intelligent conversational agent that helps users discover Indian museums, ex
 | 🧠 **Stateful Conversations** | Multi-turn memory powered by LangGraph's `MemorySaver` |
 | 🔒 **No Hallucinations** | Agent is strictly grounded — all answers come from the database |
 | 🏠 **Fully Local** | Runs entirely on your machine — no API keys, no cloud dependency |
+| 🖥️ **Streamlit UI** | Web-based chat interface with New Chat button and response timer |
+| ✂️ **Smart History Trimming** | Automatically trims conversation history to prevent context window overflow |
 
 ---
 
@@ -25,8 +27,9 @@ museum_chatbot/
 ├── core/
 │   ├── __init__.py        # Package initializer
 │   ├── db.py              # MySQL connection pool
-│   ├── llm.py             # LangGraph ReAct agent setup
+│   ├── llm.py             # LangGraph ReAct agent + history trimming
 │   └── tools.py           # LangChain tools (search, details, booking)
+├── app.py                 # Streamlit web UI
 ├── terminal.py            # CLI entry point
 ├── requirements.txt       # Python dependencies
 ├── .env                   # Environment variables (DB credentials)
@@ -49,7 +52,7 @@ graph LR
     B --> H[Response to User]
 ```
 
-1. **User** sends a natural-language query via the terminal
+1. **User** sends a natural-language query via the Streamlit UI or terminal
 2. **LangGraph ReAct Agent** (powered by Llama 3.2) reasons about which tool to call
 3. **Tools** execute fuzzy-matched SQL queries against the MySQL database
 4. **Agent** synthesizes the tool output into a clean, conversational response
@@ -62,6 +65,7 @@ graph LR
 - **LLM** — [Llama 3.2](https://ollama.com/library/llama3.2) (local, via Ollama)
 - **Agent Framework** — [LangGraph](https://github.com/langchain-ai/langgraph) (ReAct agent with checkpointing)
 - **Tool Bindings** — [LangChain](https://github.com/langchain-ai/langchain)
+- **Frontend** — [Streamlit](https://streamlit.io/) (chat UI)
 - **Database** — MySQL with connection pooling
 - **Fuzzy Matching** — Python `difflib` for typo-tolerant search
 
@@ -147,9 +151,17 @@ pip install -r requirements.txt
 
 ### 6. Run the Chatbot
 
+**Streamlit UI (recommended):**
+```bash
+streamlit run app.py
+```
+
+**Terminal mode:**
 ```bash
 python terminal.py
 ```
+
+> **Note:** Always run from within the virtual environment. On Windows, use `venv\Scripts\activate` first, or run `.\venv\Scripts\streamlit.exe run app.py` directly.
 
 ---
 
@@ -193,6 +205,19 @@ on 2026-06-15. Total Price: ₹150.
 
 ---
 
+## ✂️ Context Management
+
+Long conversations can overflow the LLM's context window (8192 tokens). This project handles it with two mechanisms:
+
+| Mechanism | How It Works |
+|---|---|
+| **History Trimming** | Uses LangChain's `trim_messages` to keep only the last **20 messages** before each LLM call. Older messages are dropped automatically. The `start_on="human"` flag ensures tool-call/response pairs are never split mid-sequence. |
+| **New Chat** | The Streamlit UI's "✨ New Chat" button generates a fresh `thread_id`, giving the agent a completely clean slate — no prior history loaded. |
+
+The trim limit is configurable via `MAX_HISTORY_MESSAGES` in `core/llm.py`.
+
+---
+
 ## ⚙️ Configuration
 
 | Variable | Description | Default |
@@ -203,6 +228,7 @@ on 2026-06-15. Total Price: ₹150.
 | `DB_NAME` | Database name | — |
 | Model (`llm.py`) | Ollama model name | `llama3.2` |
 | `num_ctx` (`llm.py`) | Context window size | `8192` |
+| `MAX_HISTORY_MESSAGES` (`llm.py`) | Max messages kept in history | `20` |
 | `max_capacity` (`tools.py`) | Max tickets per museum per day | `50` |
 
 ---
