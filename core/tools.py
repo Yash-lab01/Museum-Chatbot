@@ -18,15 +18,16 @@ def fuzzy_match(query, choices, threshold=0.6):
 @tool
 def search_museums_tool(query: str = None, needs_wheelchair: bool = False) -> str:
     """
-    Search for museums by name or city. Uses fuzzy matching.
+    Search for museums by name, city, or state/region. Uses fuzzy matching.
     Pass needs_wheelchair as True if accessibility is required.
     Always use this tool first to find the exact Museum Name and City before booking or getting details.
+    Examples: query="Kolkata", query="Rajasthan", query="Indian Museum", query="science"
     """
     conn = get_db_connection()
     try:
         cursor = conn.cursor(dictionary=True)
         
-        sql = "SELECT Name, City, Timings, Overview FROM museum_data WHERE 1=1"
+        sql = "SELECT Name, City, State_UT, Timings, Overview FROM museum_data WHERE 1=1"
         if needs_wheelchair:
             sql += " AND Wheelchair = 1"
             
@@ -41,18 +42,30 @@ def search_museums_tool(query: str = None, needs_wheelchair: bool = False) -> st
         else:
             names = list(set([m['Name'] for m in all_museums]))
             cities = list(set([m['City'] for m in all_museums]))
+            states = list(set([m['State_UT'] for m in all_museums if m.get('State_UT')]))
             
             matched_names = fuzzy_match(query, names)
             matched_cities = fuzzy_match(query, cities)
+            matched_states = fuzzy_match(query, states)
             
-            results = [m for m in all_museums if m['Name'] in matched_names or m['City'] in matched_cities]
+            results = [m for m in all_museums 
+                       if m['Name'] in matched_names 
+                       or m['City'] in matched_cities 
+                       or m.get('State_UT', '') in matched_states]
 
         if not results:
             return f"Could not find any museums matching '{query}'. Please ask the user to clarify."
+        
+        # Cap results to avoid flooding context
+        total_found = len(results)
+        display_results = results[:10]
             
-        response = "Found these matching museums:\n"
-        for row in results:
-            response += f"- **{row['Name']}** in **{row['City']}** (Open: {row['Timings']})\n"
+        response = f"Found {total_found} matching museums"
+        if total_found > 10:
+            response += f" (showing first 10)"
+        response += ":\n"
+        for row in display_results:
+            response += f"- **{row['Name']}** in **{row['City']}**, {row.get('State_UT', '')} (Open: {row['Timings']})\n"
         
         response += "\nIMPORTANT: If the user wants to book or get details, make sure you know both the EXACT Name and EXACT City from the list above. If there are multiple museums with the same name, ask the user to clarify which city they mean."
         return response
